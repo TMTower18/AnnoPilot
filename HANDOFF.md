@@ -135,13 +135,13 @@ Servers left running:frontend process14984 on3000; API wrapper23832/Python child
 6. Count caps/CPU/file extraction limits prevent runaway local resource use. No invented advanced metrics.
 7. All fixtures only in isolated backend/tests storage; production remains empty.
 8. greenlet3.1.1 pinned because original resolver selected source build requiring absent C++ tools onPython3.9; venv pip upgraded.
-9. Portable relative runtime paths. No remote push authorized/performed.
+9. Portable relative runtime paths. The post-build request now authorizes commit/push to the user-specified origin; see section 24.
 
 ## 21. Files to Read First
 HANDOFF.md; README.md; backend/app/main.py; backend/app/database/__init__.py; backend/app/models/__init__.py; backend/app/schemas/__init__.py; backend/app/parsers/__init__.py; backend/app/analyzers/__init__.py; backend/app/services/pipeline.py; backend/app/routers/api.py; backend/tests/test_api.py; backend/tests/test_analysis.py; frontend/src/App.tsx; frontend/src/api.ts; docker-compose.yml.
 
 ## 22. Git Status
-Git initialized; inherited configured identity used. No remote configured or push performed. Stable implementation checkpoint: dea7ee3 — Build AnnoPilot local annotation review MVP. Git status was clean after that commit; this documentation update is committed separately. Runtime stores/media/logs/dependencies/builds ignored. Git metadata required sandbox escalation because .git is read-only in the sandbox; the checkpoint succeeded. Run git status and git log -5 --oneline for authoritative latest state. Final npm audit executed successfully and reported 0 vulnerabilities. Compose config and frontend/Swagger/proxy health rechecks passed; production datasets still [].
+Git initialized; inherited configured identity used. Original implementation checkpoint: dea7ee3 — Build AnnoPilot local annotation review MVP; documentation checkpoint a77ae2c. Origin is now https://github.com/TMTower18/AnnoPilot.git, supplied by the user. Active branch master; origin was empty when fetched. Runtime stores/media/logs/dependencies/builds remain ignored. Git metadata requires sandbox escalation because .git is read-only in the sandbox. Run git status, git log -5 --oneline and git ls-remote origin refs/heads/master for authoritative commit/push state. Original npm audit reported 0 vulnerabilities. Compose config and frontend/Swagger/proxy health checks passed; production datasets still [].
 
 ## 23. Resume Instruction
 New Codex session:
@@ -153,3 +153,15 @@ New Codex session:
 6.Start first unfinished item under Exact Next Steps.
 7.Do not rebuild completed functionality unless verification shows it is broken.
 8.Update HANDOFF.md after meaningful progress.
+
+## 24. Post-build dataset guard and appearance (2026-10-03)
+
+Implemented reusable DatasetRequiredRoute and accessible DatasetRequiredDialog, with dynamic feature names, Cancel/Escape/focus handling and direct Upload Dataset CTA. Sidebar stays clickable. URL navigation covers /, /dashboard, /dataset, /difficulty, /smart-sampling, /workload, /review-queue and /settings with browser history. Protected pages wait for dataset status; backend failures show Unable to check dataset status and Retry instead of a missing-data prompt. Home/upload and Settings remain usable without a dataset. Successful upload resumes the requested feature. Existing scoring, import, sampling, balancing, review and export code is preserved.
+
+AppearanceProvider centralizes Light/Dark/System (default System) and Small/Medium/Large (default Medium), validates and persists localStorage preferences, listens to live prefers-color-scheme changes, handles storage failures and synchronizes storage events. Initialization precedes React rendering. Semantic CSS palette tokens replace hardcoded UI colors; rem typography scales globally (14/16/18px root). Settings uses labelled native radio groups with visible checked states and keyboard focus. Charts/tooltips use palette tokens; layouts wrap and tables scroll at larger sizes.
+
+Changed frontend/src/App.tsx, main.tsx, style.css; added appearance.css, appearance/AppearanceProvider.tsx, components/AppearanceSettings.tsx, components/DatasetRequiredRoute.tsx, hooks/usePageNavigation.ts and scripts/verify-appearance.cjs. README documents navigation and preferences. No backend, dependency or scoring changes.
+
+Verification: frontend npm run build succeeded; backend pytest 39 passed. Focused Node appearance lifecycle check passed defaults, persistence, live System changes in both directions, explicit override, invalid preference fallback and listener cleanup. Browser verified all six sidebar prompts and direct URLs, Cancel/Escape, upload CTA, Settings without data, Light/Dark/System and all three font sizes, immediate updates and reload persistence. Light/Large screenshot saved in the chat visualization folder outside repository. Browser observed separate loading states; an isolated proxy targeting an unavailable API verified the error/Retry state and independent Appearance settings. Existing isolated ui_fixture dataset opened Dashboard, Dataset, Difficulty, Smart Sampling, Workload and Review Queue without guards, preserving existing plans/reviews. Production database remained empty; no demo data inserted.
+
+Only temporary test servers on 3001/3002/8001 are used for regression checks and stopped afterward; production ports 3000/8000 remain running. Browser preferences restored to System/Medium. Docker verification remains outstanding because Desktop is manually paused, as recorded above. No additional product blocker identified. Commit/push authorized to origin master, without force push; verify actual Git output for the final hash.

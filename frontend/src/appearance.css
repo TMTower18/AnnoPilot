@@ -1,0 +1,215 @@
+/* Shared controls use the same application palette in both themes. */
+button:focus-visible,
+a:focus-visible,
+.preference:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+button.brand {
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-heading);
+  text-align: left;
+  padding-block: 0;
+  min-width: 0;
+}
+.brand-icon {
+  flex-shrink: 0;
+}
+header {
+  min-height: 76px;
+  height: auto;
+  padding-block: 16px;
+  gap: 16px;
+}
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.header-actions select {
+  width: min(16rem, 100%);
+}
+.page-heading,
+.card-title,
+.form-bottom {
+  flex-wrap: wrap;
+}
+.page-heading > div,
+.card-title > div {
+  min-width: 0;
+}
+.page-heading h1,
+.card-title h3,
+.reviewer-chips > span {
+  overflow-wrap: anywhere;
+}
+.breadcrumb {
+  flex-shrink: 0;
+}
+aside {
+  overflow-y: auto;
+}
+nav button {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+}
+nav button > svg {
+  flex-shrink: 0;
+}
+.card-title p,
+.metric > small,
+.brand small {
+  line-height: 1.5;
+}
+.metric > strong,
+.big-number {
+  overflow-wrap: anywhere;
+}
+.filters {
+  flex-wrap: wrap;
+}
+.search {
+  min-width: 12rem;
+}
+.queue-stats {
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+}
+.queue-stats span {
+  display: block;
+}
+.weight-fields label {
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.weight-fields input {
+  max-width: 100%;
+}
+.review-buttons button {
+  flex-wrap: wrap;
+}
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+legend {
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 12px;
+}
+.appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+.appearance-settings .card-title > svg {
+  color: var(--accent);
+}
+.preference-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+label.preference {
+  position: relative;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 11px 14px;
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.93rem;
+}
+.preference input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  accent-color: var(--primary);
+}
+.preference.selected {
+  border-color: var(--accent);
+  background: var(--surface-accent);
+  font-weight: 700;
+}
+.appearance-grid fieldset > p {
+  font-size: 0.85rem;
+  margin: 12px 0 0;
+}
+.dataset-required-modal {
+  max-width: 38rem;
+}
+.guard-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+}
+.guard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+.dataset-required-state,
+.guard-status {
+  max-width: 48rem;
+  margin: 24px auto;
+  padding: 40px;
+  text-align: center;
+}
+.dataset-required-state > svg,
+.guard-status > svg {
+  color: var(--accent);
+  margin: 0 auto 18px;
+}
+.dataset-required-state h1 {
+  font-size: 1.8rem;
+}
+.dataset-required-state .guard-actions {
+  justify-content: center;
+}
+.guard-status p {
+  color: var(--text-muted);
+}
+.recharts-default-tooltip {
+  font-size: 0.85rem;
+}
+.recharts-tooltip-label {
+  color: var(--text-heading);
+}
+@media (max-width: 1100px) {
+  .appearance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 800px) {
+  aside {
+    width: 65px;
+  }
+  .header-actions {
+    justify-content: space-between;
+  }
+  .header-actions select {
+    width: 10rem;
+  }
+  .guard-actions button {
+    flex: 1;
+  }
+  .dataset-required-state,
+  .guard-status {
+    padding: 24px;
+  }
+  .brand {
+    width: auto;
+  }
+}

@@ -36,6 +36,17 @@ import {
 } from "recharts";
 import { api, json } from "./api";
 import type { Dataset, Sample, Run, Reviewer, Settings } from "./types";
+import {
+  usePageNavigation,
+  isDatasetPage,
+  type Page,
+} from "./hooks/usePageNavigation";
+import {
+  DatasetRequiredDialog,
+  DatasetRequiredRoute,
+  type DatasetStatus,
+} from "./components/DatasetRequiredRoute";
+import { AppearanceSettings } from "./components/AppearanceSettings";
 
 const nav = [
   ["Dashboard", LayoutDashboard],
@@ -86,8 +97,9 @@ function Chart({
             </Pie>
             <Tooltip
               contentStyle={{
-                background: "#152035",
-                border: "1px solid #334155",
+                background: "var(--surface-panel)",
+                border: "1px solid var(--border)",
+                color: "var(--text-main)",
               }}
             />
           </PieChart>
@@ -95,24 +107,25 @@ function Chart({
           <BarChart data={data}>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="#263249"
+              stroke="var(--border)"
               vertical={false}
             />
             <XAxis
               dataKey="name"
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: "0.79rem" }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: "0.79rem" }}
               axisLine={false}
               tickLine={false}
             />
             <Tooltip
               contentStyle={{
-                background: "#152035",
-                border: "1px solid #334155",
+                background: "var(--surface-panel)",
+                border: "1px solid var(--border)",
+                color: "var(--text-main)",
               }}
             />
             <Bar dataKey="value" fill="#38bdf8" radius={[5, 5, 0, 0]} />
@@ -205,9 +218,12 @@ function SampleTable({
 }
 
 export default function App() {
+  const { page, navigate } = usePageNavigation();
+  const [datasetStatus, setDatasetStatus] = useState<DatasetStatus>("loading");
+  const [guardFeature, setGuardFeature] = useState<Page | null>(null);
+  const [pendingFeature, setPendingFeature] = useState<Page | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]),
     [active, setActive] = useState<number | null>(null),
-    [page, setPage] = useState("Dashboard"),
     [samples, setSamples] = useState<Sample[]>([]),
     [run, setRun] = useState<Run | null>(null),
     [reviewers, setReviewers] = useState<Reviewer[]>([]),
@@ -221,30 +237,40 @@ export default function App() {
     [notice, setNotice] = useState("");
   const dataset = datasets.find((d) => d.id === active);
   async function load(id = active) {
-    const ds = await api<Dataset[]>("/datasets");
-    setDatasets(ds);
-    const selected = id && ds.some((d) => d.id === id) ? id : ds[0]?.id || null;
-    setActive(selected);
-    setSettings(await api<Settings>("/settings"));
-    if (selected) {
-      const [s, r, rv, a] = await Promise.all([
-        api<Sample[]>(`/datasets/${selected}/samples`),
-        api<Run | null>(`/datasets/${selected}/sampling`),
-        api<Reviewer[]>(`/datasets/${selected}/reviewers`),
-        api<Sample[]>(`/datasets/${selected}/assignments`),
-      ]);
-      setSamples(s);
-      setRun(r);
-      setReviewers(rv);
-      setAssignments(a);
-      setReviewer((old) =>
-        rv.some((r) => r.id === old) ? old : rv[0]?.id || null,
-      );
-    } else {
-      setSamples([]);
-      setRun(null);
-      setReviewers([]);
-      setAssignments([]);
+    setDatasetStatus("loading");
+    try {
+      const ds = await api<Dataset[]>("/datasets");
+      const selected =
+        id && ds.some((d) => d.id === id) ? id : ds[0]?.id || null;
+      const config = await api<Settings>("/settings");
+      if (selected) {
+        const [s, r, rv, a] = await Promise.all([
+          api<Sample[]>(`/datasets/${selected}/samples`),
+          api<Run | null>(`/datasets/${selected}/sampling`),
+          api<Reviewer[]>(`/datasets/${selected}/reviewers`),
+          api<Sample[]>(`/datasets/${selected}/assignments`),
+        ]);
+        setSamples(s);
+        setRun(r);
+        setReviewers(rv);
+        setAssignments(a);
+        setReviewer((old) =>
+          rv.some((r) => r.id === old) ? old : rv[0]?.id || null,
+        );
+      } else {
+        setSamples([]);
+        setRun(null);
+        setReviewers([]);
+        setAssignments([]);
+      }
+      setDatasets(ds);
+      setActive(selected);
+      setSettings(config);
+      setDatasetStatus("ready");
+      return selected;
+    } catch (error) {
+      setDatasetStatus("error");
+      throw error;
     }
   }
   async function act(label: string, fn: () => Promise<unknown>) {
@@ -260,8 +286,31 @@ export default function App() {
     }
   }
   useEffect(() => {
-    void act("Loading workspace…", () => load());
+    void act("Loading workspace…", async () => {
+      const selected = await load();
+      if (selected && window.location.pathname === "/")
+        navigate("Dashboard", true);
+    });
   }, []);
+  useEffect(() => {
+    if (datasetStatus === "ready" && !dataset && isDatasetPage(page) && !upload)
+      setGuardFeature(page);
+    else if (dataset || datasetStatus !== "ready") setGuardFeature(null);
+  }, [page, datasetStatus, !!dataset]);
+  const requestPage = (next: Page) => {
+    if (isDatasetPage(next) && datasetStatus === "ready" && !dataset)
+      setGuardFeature(next);
+    else navigate(next);
+  };
+  const cancelGuard = () => {
+    setGuardFeature(null);
+    if (isDatasetPage(page) && !dataset) navigate("Home", true);
+  };
+  const startUpload = (feature: Page | null = null) => {
+    setPendingFeature(feature);
+    setGuardFeature(null);
+    setUpload(true);
+  };
   const open = (s: Sample) => {
     void act("Loading sample…", async () => {
       const data = await api<Sample>(`/samples/${s.id}`);
@@ -296,21 +345,26 @@ export default function App() {
   return (
     <div className="app">
       <aside>
-        <div className="brand">
+        <button
+          className="brand"
+          aria-label="AnnoPilot Home"
+          onClick={() => navigate("Home")}
+        >
           <div className="brand-icon">
             <ScanLine />
           </div>
           <div>
             AnnoPilot<small>REVIEW INTELLIGENCE</small>
           </div>
-        </div>
+        </button>
         <div className="nav-label">WORKSPACE</div>
         <nav>
           {nav.map(([name, Icon]) => (
             <button
               key={name}
-              onClick={() => setPage(name)}
+              onClick={() => requestPage(name)}
               className={page === name ? "active" : ""}
+              aria-current={page === name ? "page" : undefined}
             >
               <Icon size={19} />
               {name}
@@ -347,7 +401,7 @@ export default function App() {
                 ))}
               </select>
             )}
-            <button onClick={() => setUpload(true)}>
+            <button onClick={() => startUpload()}>
               <Upload size={16} />
               Upload Dataset
             </button>
@@ -375,7 +429,7 @@ export default function App() {
               {busy}
             </div>
           )}
-          {!dataset && page !== "Settings" ? (
+          {page === "Home" ? (
             <section className="landing">
               <div className="eyebrow">
                 <span className="online-dot" /> INTELLIGENT ANNOTATION REVIEW
@@ -391,7 +445,7 @@ export default function App() {
                 <br />
                 Understand complexity. Balance effort. Let people decide.
               </p>
-              <button className="large" onClick={() => setUpload(true)}>
+              <button className="large" onClick={() => startUpload()}>
                 <Upload size={18} />
                 Upload Dataset
                 <ArrowRight size={18} />
@@ -440,534 +494,599 @@ export default function App() {
                 </article>
               </div>
             </section>
-          ) : (
-            <>
-              {dataset && (
-                <>
-                  <div className="page-heading">
-                    <div>
-                      <div className="eyebrow">ANNOTATION QUALITY CONTROL</div>
-                      <h1>
-                        {page === "Dashboard"
-                          ? "Dataset overview"
-                          : page === "Workload"
-                            ? "Review Workload Balancer"
-                            : page}
-                      </h1>
-                      <p>
-                        {page === "Smart Sampling"
-                          ? "WHAT should we review?"
-                          : page === "Workload"
-                            ? "WHO reviews it?"
-                            : page === "Review Queue"
-                              ? "WHAT should be reviewed first?"
-                              : "A clear picture of your dataset and the effort ahead."}
-                      </p>
-                    </div>
-                    <div className="dataset-status">
-                      <span className="online-dot" /> Analysis complete
-                      <small>
-                        {dataset.name} · {dataset.format} ·{" "}
-                        {title(dataset.task_type)}
-                      </small>
-                    </div>
-                  </div>
-                  <div className="principle">
-                    <Eye size={16} />
-                    Difficulty estimates review effort. It does not predict
-                    whether an annotation is correct or incorrect.
-                  </div>
-                </>
-              )}
-              {dataset && page === "Dashboard" && (
-                <>
-                  <div className="stats">
-                    <Metric
-                      label="Total samples"
-                      value={dataset.sample_count}
-                      note={`${dataset.missing_media} without media`}
-                      icon={<Database />}
-                    />
-                    <Metric
-                      label="Annotations"
-                      value={dataset.annotation_count}
-                      note={`${Object.keys(dataset.classes).length} distinct classes`}
-                      icon={<ScanLine />}
-                    />
-                    <Metric
-                      label="Average difficulty"
-                      value={fmt(dataset.average_difficulty)}
-                      note="Estimated review effort · /100"
-                      icon={<ChartNoAxesCombined />}
-                    />
-                    <Metric
-                      label="Hard samples"
-                      value={dataset.levels.HARD || 0}
-                      note={`${((100 * (dataset.levels.HARD || 0)) / Math.max(1, dataset.sample_count)).toFixed(1)}% of dataset`}
-                      icon={<AlertTriangle />}
-                    />
-                  </div>
-                  <div className="grid two">
-                    <section className="card">
-                      <CardTitle
-                        title="Difficulty distribution"
-                        sub="Samples by estimated review effort"
-                      />
-                      <Chart
-                        data={Array.from({ length: 10 }, (_, i) => ({
-                          name: `${i * 10}–${i === 9 ? 100 : i * 10 + 9}`,
-                          value: samples.filter(
-                            (s) =>
-                              s.overall_difficulty != null &&
-                              s.overall_difficulty >= i * 10 &&
-                              (i === 9
-                                ? s.overall_difficulty <= 100
-                                : s.overall_difficulty < (i + 1) * 10),
-                          ).length,
-                        }))}
-                      />
-                    </section>
-                    <section className="card">
-                      <CardTitle
-                        title="Review effort mix"
-                        sub="Easy · Medium · Hard · Unavailable"
-                      />
-                      <Chart
-                        pie
-                        data={Object.entries(dataset.levels).map(
-                          ([name, value]) => ({ name, value }),
-                        )}
-                      />
-                      <div className="legend">
-                        {Object.entries(dataset.levels).map(([k, v], i) => (
-                          <span key={k}>
-                            <i style={{ background: colors[i % 5] }} />
-                            {k} <strong>{v}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </section>
-                    <section className="card">
-                      <CardTitle
-                        title="Class distribution"
-                        sub="Annotation counts from your imported dataset"
-                      />
-                      {dataset.annotation_count ? (
-                        <Chart
-                          data={Object.entries(dataset.classes).map(
-                            ([name, value]) => ({ name, value }),
-                          )}
-                        />
-                      ) : (
-                        <Empty text="No valid annotations in this dataset." />
-                      )}
-                    </section>
-                    <section className="card">
-                      <CardTitle
-                        title="Dataset insights"
-                        sub="Measured signals, transparent limitations"
-                      />
-                      <div className="insights">
+          ) : page !== "Settings" ? (
+            <DatasetRequiredRoute
+              status={datasetStatus}
+              hasDataset={!!dataset}
+              feature={page}
+              onUpload={() => startUpload(page)}
+              onCancel={cancelGuard}
+              onRetry={() => void act("Checking dataset status…", () => load())}
+            >
+              <>
+                {dataset && (
+                  <>
+                    <div className="page-heading">
+                      <div>
+                        <div className="eyebrow">
+                          ANNOTATION QUALITY CONTROL
+                        </div>
+                        <h1>
+                          {page === "Dashboard"
+                            ? "Dataset overview"
+                            : page === "Workload"
+                              ? "Review Workload Balancer"
+                              : page}
+                        </h1>
                         <p>
-                          <span>{dataset.rare_classes.length}</span> rare
-                          classes at the configured threshold.
-                        </p>
-                        <p>
-                          <span>
-                            {
-                              samples.filter(
-                                (s) =>
-                                  s.visual_difficulty != null &&
-                                  s.visual_difficulty >= 70,
-                              ).length
-                            }
-                          </span>{" "}
-                          samples with high visual review difficulty.
-                        </p>
-                        <p>
-                          <span>{dataset.missing_media}</span> samples have
-                          unavailable media.
-                        </p>
-                        <p>
-                          <span>{dataset.levels.EASY || 0}</span> easy ·{" "}
-                          <span>{dataset.levels.MEDIUM || 0}</span> medium ·{" "}
-                          <span>{dataset.levels.HARD || 0}</span> hard samples.
-                        </p>
-                        <p>
-                          {Object.entries(dataset.annotation_types)
-                            .map(([k, v]) => `${title(k)}: ${v}`)
-                            .join(" · ") || "No supported shapes"}
+                          {page === "Smart Sampling"
+                            ? "WHAT should we review?"
+                            : page === "Workload"
+                              ? "WHO reviews it?"
+                              : page === "Review Queue"
+                                ? "WHAT should be reviewed first?"
+                                : "A clear picture of your dataset and the effort ahead."}
                         </p>
                       </div>
-                    </section>
-                  </div>
-                  <div className="grid two">
-                    {dataset.annotation_count > 0 && (
+                      <div className="dataset-status">
+                        <span className="online-dot" /> Analysis complete
+                        <small>
+                          {dataset.name} · {dataset.format} ·{" "}
+                          {title(dataset.task_type)}
+                        </small>
+                      </div>
+                    </div>
+                    <div className="principle">
+                      <Eye size={16} />
+                      Difficulty estimates review effort. It does not predict
+                      whether an annotation is correct or incorrect.
+                    </div>
+                  </>
+                )}
+                {dataset && page === "Dashboard" && (
+                  <>
+                    <div className="stats">
+                      <Metric
+                        label="Total samples"
+                        value={dataset.sample_count}
+                        note={`${dataset.missing_media} without media`}
+                        icon={<Database />}
+                      />
+                      <Metric
+                        label="Annotations"
+                        value={dataset.annotation_count}
+                        note={`${Object.keys(dataset.classes).length} distinct classes`}
+                        icon={<ScanLine />}
+                      />
+                      <Metric
+                        label="Average difficulty"
+                        value={fmt(dataset.average_difficulty)}
+                        note="Estimated review effort · /100"
+                        icon={<ChartNoAxesCombined />}
+                      />
+                      <Metric
+                        label="Hard samples"
+                        value={dataset.levels.HARD || 0}
+                        note={`${((100 * (dataset.levels.HARD || 0)) / Math.max(1, dataset.sample_count)).toFixed(1)}% of dataset`}
+                        icon={<AlertTriangle />}
+                      />
+                    </div>
+                    <div className="grid two">
                       <section className="card">
                         <CardTitle
-                          title="Annotation types"
-                          sub="Normalized shapes across the dataset"
+                          title="Difficulty distribution"
+                          sub="Samples by estimated review effort"
                         />
                         <Chart
-                          data={Object.entries(dataset.annotation_types).map(
-                            ([name, value]) => ({ name: title(name), value }),
-                          )}
-                        />
-                      </section>
-                    )}
-                    {samples.some((s) => s.visual_difficulty !== null) && (
-                      <section className="card">
-                        <CardTitle
-                          title="Visual difficulty distribution"
-                          sub="Measured images only; missing media is excluded"
-                        />
-                        <Chart
-                          data={Array.from({ length: 5 }, (_, i) => ({
-                            name: `${i * 20}–${i === 4 ? 100 : i * 20 + 19}`,
+                          data={Array.from({ length: 10 }, (_, i) => ({
+                            name: `${i * 10}–${i === 9 ? 100 : i * 10 + 9}`,
                             value: samples.filter(
                               (s) =>
-                                s.visual_difficulty !== null &&
-                                s.visual_difficulty >= i * 20 &&
-                                (i === 4
-                                  ? s.visual_difficulty <= 100
-                                  : s.visual_difficulty < (i + 1) * 20),
+                                s.overall_difficulty != null &&
+                                s.overall_difficulty >= i * 10 &&
+                                (i === 9
+                                  ? s.overall_difficulty <= 100
+                                  : s.overall_difficulty < (i + 1) * 10),
                             ).length,
                           }))}
                         />
                       </section>
-                    )}
-                  </div>
-                  {dataset.warnings.length > 0 && (
-                    <details className="card warnings">
-                      <summary>
-                        <AlertTriangle size={16} />
-                        {dataset.warnings.length} import warnings and
-                        availability notes
-                      </summary>
-                      <ul>
-                        {dataset.warnings.map((w, i) => (
-                          <li key={i}>{w}</li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                  <section className="card">
-                    <CardTitle
-                      title="Highest effort samples"
-                      sub="A starting point for review — not a prediction of issues"
-                    />
-                    <SampleTable
-                      rows={[...samples]
-                        .sort(
-                          (a, b) =>
-                            (b.overall_difficulty || 0) -
-                            (a.overall_difficulty || 0),
-                        )
-                        .slice(0, 5)}
-                      onOpen={open}
-                    />
-                  </section>
-                </>
-              )}
-              {dataset && (page === "Dataset" || page === "Difficulty") && (
-                <SampleBrowser
-                  samples={samples}
-                  onOpen={open}
-                  difficulty={page === "Difficulty"}
-                />
-              )}
-              {dataset && page === "Smart Sampling" && (
-                <>
-                  <SamplingForm
-                    disabled={!!busy}
-                    onGenerate={(config) =>
-                      void act("Generating QC sample…", async () => {
-                        await api(
-                          `/datasets/${active}/sampling`,
-                          json("POST", config),
-                        );
-                        await load();
-                      })
-                    }
-                  />
-                  {run ? (
-                    <section className="card">
-                      <CardTitle
-                        title={`${run.selections.length} selected from ${dataset.sample_count} samples`}
-                        sub={
-                          run.needs_regeneration
-                            ? "Needs Regeneration — scores have changed"
-                            : "Deterministic selection · no duplicate samples"
-                        }
-                        action={exportLink("smart_sample")}
-                      />
-                      {run.needs_regeneration && (
-                        <div className="alert">Needs Regeneration</div>
-                      )}
-                      <div className="legend">
-                        {[
-                          "random",
-                          "difficulty",
-                          "edge",
-                          "coverage_fallback",
-                        ].map((k) => (
-                          <span key={k}>
-                            {title(k)}{" "}
-                            <strong>
+                      <section className="card">
+                        <CardTitle
+                          title="Review effort mix"
+                          sub="Easy · Medium · Hard · Unavailable"
+                        />
+                        <Chart
+                          pie
+                          data={Object.entries(dataset.levels).map(
+                            ([name, value]) => ({ name, value }),
+                          )}
+                        />
+                        <div className="legend">
+                          {Object.entries(dataset.levels).map(([k, v], i) => (
+                            <span key={k}>
+                              <i style={{ background: colors[i % 5] }} />
+                              {k} <strong>{v}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </section>
+                      <section className="card">
+                        <CardTitle
+                          title="Class distribution"
+                          sub="Annotation counts from your imported dataset"
+                        />
+                        {dataset.annotation_count ? (
+                          <Chart
+                            data={Object.entries(dataset.classes).map(
+                              ([name, value]) => ({ name, value }),
+                            )}
+                          />
+                        ) : (
+                          <Empty text="No valid annotations in this dataset." />
+                        )}
+                      </section>
+                      <section className="card">
+                        <CardTitle
+                          title="Dataset insights"
+                          sub="Measured signals, transparent limitations"
+                        />
+                        <div className="insights">
+                          <p>
+                            <span>{dataset.rare_classes.length}</span> rare
+                            classes at the configured threshold.
+                          </p>
+                          <p>
+                            <span>
                               {
-                                run.selections.filter(
-                                  (s) => s.sampling_reason === k,
+                                samples.filter(
+                                  (s) =>
+                                    s.visual_difficulty != null &&
+                                    s.visual_difficulty >= 70,
                                 ).length
                               }
-                            </strong>
-                          </span>
-                        ))}
-                      </div>
-                      <SampleTable rows={run.selections} onOpen={open} />
+                            </span>{" "}
+                            samples with high visual review difficulty.
+                          </p>
+                          <p>
+                            <span>{dataset.missing_media}</span> samples have
+                            unavailable media.
+                          </p>
+                          <p>
+                            <span>{dataset.levels.EASY || 0}</span> easy ·{" "}
+                            <span>{dataset.levels.MEDIUM || 0}</span> medium ·{" "}
+                            <span>{dataset.levels.HARD || 0}</span> hard
+                            samples.
+                          </p>
+                          <p>
+                            {Object.entries(dataset.annotation_types)
+                              .map(([k, v]) => `${title(k)}: ${v}`)
+                              .join(" · ") || "No supported shapes"}
+                          </p>
+                        </div>
+                      </section>
+                    </div>
+                    <div className="grid two">
+                      {dataset.annotation_count > 0 && (
+                        <section className="card">
+                          <CardTitle
+                            title="Annotation types"
+                            sub="Normalized shapes across the dataset"
+                          />
+                          <Chart
+                            data={Object.entries(dataset.annotation_types).map(
+                              ([name, value]) => ({ name: title(name), value }),
+                            )}
+                          />
+                        </section>
+                      )}
+                      {samples.some((s) => s.visual_difficulty !== null) && (
+                        <section className="card">
+                          <CardTitle
+                            title="Visual difficulty distribution"
+                            sub="Measured images only; missing media is excluded"
+                          />
+                          <Chart
+                            data={Array.from({ length: 5 }, (_, i) => ({
+                              name: `${i * 20}–${i === 4 ? 100 : i * 20 + 19}`,
+                              value: samples.filter(
+                                (s) =>
+                                  s.visual_difficulty !== null &&
+                                  s.visual_difficulty >= i * 20 &&
+                                  (i === 4
+                                    ? s.visual_difficulty <= 100
+                                    : s.visual_difficulty < (i + 1) * 20),
+                              ).length,
+                            }))}
+                          />
+                        </section>
+                      )}
+                    </div>
+                    {dataset.warnings.length > 0 && (
+                      <details className="card warnings">
+                        <summary>
+                          <AlertTriangle size={16} />
+                          {dataset.warnings.length} import warnings and
+                          availability notes
+                        </summary>
+                        <ul>
+                          {dataset.warnings.map((w, i) => (
+                            <li key={i}>{w}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    <section className="card">
+                      <CardTitle
+                        title="Highest effort samples"
+                        sub="A starting point for review — not a prediction of issues"
+                      />
+                      <SampleTable
+                        rows={[...samples]
+                          .sort(
+                            (a, b) =>
+                              (b.overall_difficulty || 0) -
+                              (a.overall_difficulty || 0),
+                          )
+                          .slice(0, 5)}
+                        onOpen={open}
+                      />
                     </section>
-                  ) : (
-                    <Empty text="Set a QC budget and generate your first review subset." />
-                  )}
-                </>
-              )}
-              {dataset && page === "Workload" && (
-                <>
-                  <section className="card">
-                    <CardTitle
-                      title="Your review team"
-                      sub="Assignments balance estimated effort across the selected QC subset."
-                    />
-                    <ReviewerForm
+                  </>
+                )}
+                {dataset && (page === "Dataset" || page === "Difficulty") && (
+                  <SampleBrowser
+                    samples={samples}
+                    onOpen={open}
+                    difficulty={page === "Difficulty"}
+                  />
+                )}
+                {dataset && page === "Smart Sampling" && (
+                  <>
+                    <SamplingForm
                       disabled={!!busy}
-                      onAdd={(name) =>
-                        void act("Adding reviewer…", async () => {
+                      onGenerate={(config) =>
+                        void act("Generating QC sample…", async () => {
                           await api(
-                            `/datasets/${active}/reviewers`,
-                            json("POST", { name }),
+                            `/datasets/${active}/sampling`,
+                            json("POST", config),
                           );
                           await load();
                         })
                       }
                     />
-                    <div className="reviewer-chips">
-                      {reviewers.map((r) => (
-                        <span key={r.id}>
-                          {r.name}
-                          <button
-                            aria-label={`Remove ${r.name}`}
-                            className="icon-button"
-                            disabled={!!busy}
-                            onClick={() =>
-                              void act("Removing reviewer…", async () => {
-                                await api(`/reviewers/${r.id}`, {
-                                  method: "DELETE",
-                                });
-                                await load();
-                              })
+                    {run ? (
+                      <section className="card">
+                        <CardTitle
+                          title={`${run.selections.length} selected from ${dataset.sample_count} samples`}
+                          sub={
+                            run.needs_regeneration
+                              ? "Needs Regeneration — scores have changed"
+                              : "Deterministic selection · no duplicate samples"
+                          }
+                          action={exportLink("smart_sample")}
+                        />
+                        {run.needs_regeneration && (
+                          <div className="alert">Needs Regeneration</div>
+                        )}
+                        <div className="legend">
+                          {[
+                            "random",
+                            "difficulty",
+                            "edge",
+                            "coverage_fallback",
+                          ].map((k) => (
+                            <span key={k}>
+                              {title(k)}{" "}
+                              <strong>
+                                {
+                                  run.selections.filter(
+                                    (s) => s.sampling_reason === k,
+                                  ).length
+                                }
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                        <SampleTable rows={run.selections} onOpen={open} />
+                      </section>
+                    ) : (
+                      <Empty text="Set a QC budget and generate your first review subset." />
+                    )}
+                  </>
+                )}
+                {dataset && page === "Workload" && (
+                  <>
+                    <section className="card">
+                      <CardTitle
+                        title="Your review team"
+                        sub="Assignments balance estimated effort across the selected QC subset."
+                      />
+                      <ReviewerForm
+                        disabled={!!busy}
+                        onAdd={(name) =>
+                          void act("Adding reviewer…", async () => {
+                            await api(
+                              `/datasets/${active}/reviewers`,
+                              json("POST", { name }),
+                            );
+                            await load();
+                          })
+                        }
+                      />
+                      <div className="reviewer-chips">
+                        {reviewers.map((r) => (
+                          <span key={r.id}>
+                            {r.name}
+                            <button
+                              aria-label={`Remove ${r.name}`}
+                              className="icon-button"
+                              disabled={!!busy}
+                              onClick={() =>
+                                void act("Removing reviewer…", async () => {
+                                  await api(`/reviewers/${r.id}`, {
+                                    method: "DELETE",
+                                  });
+                                  await load();
+                                })
+                              }
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        disabled={
+                          !!busy ||
+                          !reviewers.length ||
+                          !run ||
+                          run.needs_regeneration
+                        }
+                        onClick={() =>
+                          void act("Balancing workload…", async () => {
+                            await api(`/datasets/${active}/balance`, {
+                              method: "POST",
+                            });
+                            await load();
+                          })
+                        }
+                      >
+                        <Users size={16} />
+                        Balance workload
+                      </button>
+                      {!run && (
+                        <p className="muted">
+                          Generate a Smart Sampling subset first.
+                        </p>
+                      )}
+                      {run?.needs_regeneration && (
+                        <p className="warning-text">
+                          QC subset needs regeneration before balancing.
+                        </p>
+                      )}
+                    </section>
+                    {reviewers.length > 0 && (
+                      <div className="grid reviewer-grid">
+                        {reviewers.map((r) => {
+                          const rows = assignments.filter(
+                              (a) => a.reviewer_id === r.id,
+                            ),
+                            total = rows.reduce(
+                              (sum, s) => sum + (s.overall_difficulty || 0),
+                              0,
+                            );
+                          const unavailable = rows.some(
+                            (s) => s.overall_difficulty === null,
+                          );
+                          return (
+                            <section className="card" key={r.id}>
+                              <h3>{r.name}</h3>
+                              <div className="big-number">
+                                {unavailable ? "Unavailable" : total.toFixed(1)}
+                                <small>Total difficulty</small>
+                              </div>
+                              <p className="muted">
+                                {rows.length} samples · Average{" "}
+                                {unavailable
+                                  ? "Unavailable"
+                                  : rows.length
+                                    ? (total / rows.length).toFixed(1)
+                                    : "—"}{" "}
+                                ·{" "}
+                                {rows.filter((s) => s.level === "HARD").length}{" "}
+                                hard
+                              </p>
+                            </section>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {assignments.length > 0 && (
+                      <>
+                        <section className="card">
+                          <CardTitle
+                            title="Estimated review workload"
+                            sub="Sum of assigned sample difficulty"
+                          />
+                          {assignments.some(
+                            (s) => s.overall_difficulty === null,
+                          ) ? (
+                            <Empty text="Workload unavailable — regenerate this plan after adjusting scoring weights." />
+                          ) : (
+                            <Chart
+                              data={reviewers.map((r) => ({
+                                name: r.name,
+                                value: assignments
+                                  .filter((a) => a.reviewer_id === r.id)
+                                  .reduce(
+                                    (sum, s) =>
+                                      sum + (s.overall_difficulty || 0),
+                                    0,
+                                  ),
+                              }))}
+                            />
+                          )}
+                        </section>
+                        <section className="card">
+                          <CardTitle
+                            title="Assignments"
+                            sub={
+                              assignments.some((a) => a.needs_regeneration)
+                                ? "Needs Regeneration"
+                                : "Generate a new subset to rebalance after saving review decisions."
                             }
-                          >
-                            <X size={14} />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
+                            action={exportLink("review_assignments")}
+                          />
+                          <div className="table-wrap">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Sample</th>
+                                  <th>Task</th>
+                                  <th>Difficulty</th>
+                                  <th>Level</th>
+                                  <th>Reviewer</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {assignments.map((s) => (
+                                  <tr key={s.id} onClick={() => open(s)}>
+                                    <td>{s.file_name}</td>
+                                    <td>{title(s.task_type)}</td>
+                                    <td>{fmt(s.overall_difficulty)}</td>
+                                    <td>
+                                      <Badge level={s.level} />
+                                    </td>
+                                    <td>{s.reviewer}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      </>
+                    )}
+                  </>
+                )}
+                {dataset && page === "Review Queue" && (
+                  <>
+                    <section className="card">
+                      <CardTitle
+                        title="Reviewer priority queue"
+                        sub="Each reviewer’s samples are ordered by difficulty, highest first."
+                        action={exportLink("review_results")}
+                      />
+                      <label>
+                        Reviewer
+                        <select
+                          value={reviewer || ""}
+                          onChange={(e) => setReviewer(Number(e.target.value))}
+                        >
+                          <option value="" disabled>
+                            Select reviewer
+                          </option>
+                          {reviewers.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {queue.some((a) => a.needs_regeneration) && (
+                        <div className="alert">
+                          Needs Regeneration — these assignments were based on
+                          previous scores.
+                        </div>
+                      )}
+                      <div className="queue-stats">
+                        {[
+                          ["Total", queue.length],
+                          [
+                            "Reviewed",
+                            queue.filter(
+                              (s) =>
+                                s.status === "REVIEWED" ||
+                                s.status === "ISSUE_FOUND",
+                            ).length,
+                          ],
+                          [
+                            "Issues found",
+                            queue.filter((s) => s.status === "ISSUE_FOUND")
+                              .length,
+                          ],
+                          [
+                            "Pending",
+                            queue.filter((s) => s.status === "PENDING").length,
+                          ],
+                          [
+                            "Skipped",
+                            queue.filter((s) => s.status === "SKIPPED").length,
+                          ],
+                        ].map(([k, v]) => (
+                          <div key={k}>
+                            <strong>{v}</strong>
+                            <span>{k}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <SampleTable rows={queue} onOpen={open} review />
+                    </section>
+                  </>
+                )}
+                {dataset && page === "Dataset" && (
+                  <div className="footer-actions">
                     <button
-                      disabled={
-                        !!busy ||
-                        !reviewers.length ||
-                        !run ||
-                        run.needs_regeneration
-                      }
+                      className="secondary"
+                      disabled={!!busy}
                       onClick={() =>
-                        void act("Balancing workload…", async () => {
-                          await api(`/datasets/${active}/balance`, {
+                        void act("Recalculating Difficulty…", async () => {
+                          await api(`/datasets/${active}/recalculate`, {
                             method: "POST",
                           });
                           await load();
                         })
                       }
                     >
-                      <Users size={16} />
-                      Balance workload
+                      <RotateCcw size={15} />
+                      Recalculate Difficulty
                     </button>
-                    {!run && (
-                      <p className="muted">
-                        Generate a Smart Sampling subset first.
-                      </p>
-                    )}
-                    {run?.needs_regeneration && (
-                      <p className="warning-text">
-                        QC subset needs regeneration before balancing.
-                      </p>
-                    )}
-                  </section>
-                  {reviewers.length > 0 && (
-                    <div className="grid reviewer-grid">
-                      {reviewers.map((r) => {
-                        const rows = assignments.filter(
-                            (a) => a.reviewer_id === r.id,
-                          ),
-                          total = rows.reduce(
-                            (sum, s) => sum + (s.overall_difficulty || 0),
-                            0,
-                          );
-                        const unavailable = rows.some(
-                          (s) => s.overall_difficulty === null,
-                        );
-                        return (
-                          <section className="card" key={r.id}>
-                            <h3>{r.name}</h3>
-                            <div className="big-number">
-                              {unavailable ? "Unavailable" : total.toFixed(1)}
-                              <small>Total difficulty</small>
-                            </div>
-                            <p className="muted">
-                              {rows.length} samples · Average{" "}
-                              {unavailable
-                                ? "Unavailable"
-                                : rows.length
-                                  ? (total / rows.length).toFixed(1)
-                                  : "—"}{" "}
-                              · {rows.filter((s) => s.level === "HARD").length}{" "}
-                              hard
-                            </p>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {assignments.length > 0 && (
-                    <>
-                      <section className="card">
-                        <CardTitle
-                          title="Estimated review workload"
-                          sub="Sum of assigned sample difficulty"
-                        />
-                        {assignments.some(
-                          (s) => s.overall_difficulty === null,
-                        ) ? (
-                          <Empty text="Workload unavailable — regenerate this plan after adjusting scoring weights." />
-                        ) : (
-                          <Chart
-                            data={reviewers.map((r) => ({
-                              name: r.name,
-                              value: assignments
-                                .filter((a) => a.reviewer_id === r.id)
-                                .reduce(
-                                  (sum, s) => sum + (s.overall_difficulty || 0),
-                                  0,
-                                ),
-                            }))}
-                          />
-                        )}
-                      </section>
-                      <section className="card">
-                        <CardTitle
-                          title="Assignments"
-                          sub={
-                            assignments.some((a) => a.needs_regeneration)
-                              ? "Needs Regeneration"
-                              : "Generate a new subset to rebalance after saving review decisions."
-                          }
-                          action={exportLink("review_assignments")}
-                        />
-                        <div className="table-wrap">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Sample</th>
-                                <th>Task</th>
-                                <th>Difficulty</th>
-                                <th>Level</th>
-                                <th>Reviewer</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {assignments.map((s) => (
-                                <tr key={s.id} onClick={() => open(s)}>
-                                  <td>{s.file_name}</td>
-                                  <td>{title(s.task_type)}</td>
-                                  <td>{fmt(s.overall_difficulty)}</td>
-                                  <td>
-                                    <Badge level={s.level} />
-                                  </td>
-                                  <td>{s.reviewer}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </section>
-                    </>
-                  )}
-                </>
-              )}
-              {dataset && page === "Review Queue" && (
-                <>
-                  <section className="card">
-                    <CardTitle
-                      title="Reviewer priority queue"
-                      sub="Each reviewer’s samples are ordered by difficulty, highest first."
-                      action={exportLink("review_results")}
-                    />
-                    <label>
-                      Reviewer
-                      <select
-                        value={reviewer || ""}
-                        onChange={(e) => setReviewer(Number(e.target.value))}
-                      >
-                        <option value="" disabled>
-                          Select reviewer
-                        </option>
-                        {reviewers.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {queue.some((a) => a.needs_regeneration) && (
-                      <div className="alert">
-                        Needs Regeneration — these assignments were based on
-                        previous scores.
-                      </div>
-                    )}
-                    <div className="queue-stats">
-                      {[
-                        ["Total", queue.length],
-                        [
-                          "Reviewed",
-                          queue.filter(
-                            (s) =>
-                              s.status === "REVIEWED" ||
-                              s.status === "ISSUE_FOUND",
-                          ).length,
-                        ],
-                        [
-                          "Issues found",
-                          queue.filter((s) => s.status === "ISSUE_FOUND")
-                            .length,
-                        ],
-                        [
-                          "Pending",
-                          queue.filter((s) => s.status === "PENDING").length,
-                        ],
-                        [
-                          "Skipped",
-                          queue.filter((s) => s.status === "SKIPPED").length,
-                        ],
-                      ].map(([k, v]) => (
-                        <div key={k}>
-                          <strong>{v}</strong>
-                          <span>{k}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <SampleTable rows={queue} onOpen={open} review />
-                  </section>
-                </>
-              )}
-              {page === "Settings" && settings && (
+                    <button
+                      className="danger secondary"
+                      disabled={!!busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete ${dataset.name} and its analysis, selections and reviews?`,
+                          )
+                        )
+                          void act("Deleting dataset…", async () => {
+                            await api(`/datasets/${active}`, {
+                              method: "DELETE",
+                            });
+                            navigate("Home");
+                            await load(null);
+                          });
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      Delete Dataset
+                    </button>
+                  </div>
+                )}
+              </>
+            </DatasetRequiredRoute>
+          ) : (
+            <>
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">WORKSPACE PREFERENCES</div>
+                  <h1>Settings</h1>
+                  <p>Customize your interface and scoring preferences.</p>
+                </div>
+              </div>
+              <AppearanceSettings />
+              {settings ? (
                 <SettingsForm
                   settings={settings}
                   disabled={!!busy}
@@ -981,45 +1100,25 @@ export default function App() {
                     })
                   }
                 />
-              )}
-              {dataset && page === "Dataset" && (
-                <div className="footer-actions">
+              ) : datasetStatus === "error" ? (
+                <section className="card" role="alert">
+                  <h2>Scoring settings unavailable</h2>
+                  <p>
+                    Appearance works locally. Reconnect to the backend to load
+                    scoring settings.
+                  </p>
                   <button
-                    className="secondary"
-                    disabled={!!busy}
                     onClick={() =>
-                      void act("Recalculating Difficulty…", async () => {
-                        await api(`/datasets/${active}/recalculate`, {
-                          method: "POST",
-                        });
-                        await load();
-                      })
+                      void act("Checking dataset status…", () => load())
                     }
                   >
-                    <RotateCcw size={15} />
-                    Recalculate Difficulty
+                    Retry
                   </button>
-                  <button
-                    className="danger secondary"
-                    disabled={!!busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete ${dataset.name} and its analysis, selections and reviews?`,
-                        )
-                      )
-                        void act("Deleting dataset…", async () => {
-                          await api(`/datasets/${active}`, {
-                            method: "DELETE",
-                          });
-                          setPage("Dashboard");
-                          await load(null);
-                        });
-                    }}
-                  >
-                    <Trash2 size={15} />
-                    Delete Dataset
-                  </button>
+                </section>
+              ) : (
+                <div className="busy" role="status">
+                  <LoaderCircle className="spin" size={18} />
+                  Loading scoring settings…
                 </div>
               )}
             </>
@@ -1030,6 +1129,13 @@ export default function App() {
           <span>Local · CPU analysis · Human decisions</span>
         </footer>
       </div>
+      {guardFeature && (
+        <DatasetRequiredDialog
+          feature={guardFeature}
+          onCancel={cancelGuard}
+          onUpload={() => startUpload(guardFeature)}
+        />
+      )}
       {upload && (
         <UploadDialog
           error={error}
@@ -1042,7 +1148,8 @@ export default function App() {
                 body: form,
               });
               await load(d.id);
-              setPage("Dashboard");
+              navigate(pendingFeature || "Dashboard");
+              setPendingFeature(null);
               setUpload(false);
             })
           }
@@ -1377,7 +1484,7 @@ function SettingsForm({
       <div className="page-heading">
         <div>
           <div className="eyebrow">EXPLAINABLE HEURISTICS</div>
-          <h1>Scoring settings</h1>
+          <h2>Scoring settings</h2>
           <p>
             Save to recalculate all datasets and mark existing review plans for
             regeneration.
