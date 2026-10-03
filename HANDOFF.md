@@ -1,0 +1,155 @@
+# AnnoPilot Development Handoff
+
+Last verified: 2026-10-03, approximately 11:18 Asia/Bangkok.
+
+## 1. Project Goal
+Dataset → Import/normalize → Media + Annotation Analysis → Difficulty → Dataset Health → Smart Sampling → Workload → Reviewer Priority → Human Review → CSV Export.
+Difficulty estimates review effort/complexity, never correctness. Human review alone records No Issue or Issue Found. Production data must come from user uploads.
+
+## 2. Working Directory
+F:\VinAI\Workspace\Tool\AnnoPilot. Initially empty; no existing source, handoff or project/inspected-parent AGENTS instructions found. Project built directly here, no nested checkout. Runtime paths are portable.
+
+## 3. Architecture
+React19/Vite6/TypeScript/Tailwind4/Recharts/Lucide frontend. Python/FastAPI/Pydantic/SQLAlchemy/SQLite backend. Local Python3.9.6; Docker Python3.11. Flexible JSON geometry, four parser strategies and four BaseDifficultyAnalyzer strategies. Shared deterministic sampling, greedy effort balancing, independent reviewer queues. Synchronous local CPU analysis; no external AI/cloud/job infrastructure.
+
+## 4. Current Project Structure
+- frontend/src: App.tsx, api.ts, types.ts, main.tsx, style.css
+- frontend: package.json/lock, vite.config.ts, tsconfig.json, postcss.config.js, index.html, Dockerfile, nginx.conf
+- backend/app: main.py, database/, models/, schemas/, parsers/, analyzers/, services/pipeline.py, routers/api.py
+- backend/tests: conftest.py, test_parsers.py, test_analysis.py, test_api.py, ui_fixture/labels.xml and README.md
+- backend: requirements.txt, pytest.ini, Dockerfile
+- root: README.md, HANDOFF.md, Start-AnnoPilot.ps1, docker-compose.yml, .gitignore
+- uploads/, exports/: gitkeep plus ignored user runtime files
+Ignored: venv, node_modules, npm cache, builds, databases, test runtime stores, logs, uploads/exports.
+
+## 5. Implemented
+- Unified dataset/sample/annotation/analysis model with BBOX_2D, POLYGON, MASK, KEYPOINT, CUBOID_3D and MIXED tasks. Attributes, nullable occlusion and source metadata preserved: models/ and parsers/.
+- CVAT, COCO, YOLO detection, KITTI strategies; invalid individual shapes warned/skipped; malformed/empty documents handled.
+- Multipart/ZIP uploads, bounded extraction, traversal/symlink rejection, format/task detection, media matching, missing media retained: services/pipeline.py, routers/api.py.
+- OpenCV blur/exposure/contrast/edges/entropy, task-specific annotation features, availability/reasons, weight renormalization and actual contributions: analyzers/.
+- Configurable weight groups and thresholds; save recalculates all datasets atomically. Revision mismatch exposes Needs Regeneration for existing plans.
+- Seven connected frontend pages: real statistics/charts, filters/sort/20-row client pagination, scaling SVG box/polygon/keypoint/label overlays, properties and scoring explanation.
+- Count/percentage seeded QC selection, deduplication, explicit coverage fallback; reviewer creation/removal guards; greedy QC-subset balancing; independent priority queues.
+- No Issue, Issue Found, Skip, persisted notes, next PENDING sample. Historical results retained across regeneration.
+- Three UTF-8-BOM CSV exports with requested columns and formula-text escaping.
+- Dataset deletion confirmation, cascades, complete upload-folder cleanup via additive storage_key migration.
+- Dockerfiles/Compose/Nginx, local hidden-process start script and comprehensive README.
+
+## 6. Partially Implemented
+| Feature | What works | Remaining / next action / files |
+| --- | --- | --- |
+| COCO RLE masks | Original RLE retained; count/rarity available | Validated decoder, geometry metrics and overlay. parsers/, analyzers/, App.tsx. Never claim current rendering. |
+| 3D sensors | KITTI parse/score/QC/metadata review; BIN/PCD retained/matched | Decode point cloud, calibration transforms/density and optional viewer. parsers/, analyzers/, pipeline.py, App.tsx. |
+| Import progress | Busy/loading messages, disabled actions | Optional actual stage progress/background job for large imports; no invented percentages. |
+| Large dataset browsing | Fetch all summaries, paginate20 client rows | Server-side filtering/pagination if needed. |
+| Docker verification | Compose config validates, proxy/healthcheck/volumes implemented | Unpause engine, free3000/8000, build/start and smoke-test. |
+These limits are described accurately in README/UI; core local workflow works.
+
+## 7. Not Started
+Future/non-goals: CVAT video tracks/skeletons/raster masks, YOLO pose/segmentation, articulated pose viewer, advanced 3D viewer, login/RBAC and internet deployment hardening. Do not add auto-label/model training/chatbots to MVP.
+
+## 8. Supported Annotation Tasks
+| Task | Status | Notes |
+| --- | --- | --- |
+| BBox2D | TESTED | CVAT/COCO/YOLO, tiny/overlap/known occlusion/rarity |
+| Polygon segmentation | TESTED | CVAT/COCO, area/vertices/envelope crowding; RLE partial |
+| Keypoint | TESTED | CVAT points/COCO visibility; unknown visibility stays unknown |
+| Cuboid3D | TESTED | KITTI geometry/metadata/available scoring; calibrated sensor features unavailable |
+| Mixed | TESTED | Per-task analyzers combined by annotation counts |
+
+## 9. Supported Formats
+| Format | Status | Tasks | Limits |
+| --- | --- | --- | --- |
+| CVAT images XML | TESTED | Boxes/polygons/points/mixed | Attributes/occlusion; video tracks unsupported |
+| COCO JSON | TESTED | Boxes/polygons/keypoints | RLE retained without decoder; multiple rings count as separate normalized shapes |
+| YOLO TXT | TESTED | Detection BBox | Five fields, matching image required, optional classes.txt |
+| KITTI TXT | TESTED | Cuboid3D |15+ fields; rectified camera frame/bottom-center preserved; DontCare excluded |
+Unit parser and multipart upload/analysis integration tests exercised all implemented formats. JPG/JPEG/PNG decoded; BIN/PCD retained but not decoded/visualized.
+
+## 10. Difficulty Implementation
+Source: backend/app/analyzers/__init__.py. Defaults/validation: backend/app/schemas/__init__.py.
+Each feature: normalized[0,1] value, raw, available, reason_if_unavailable. Score =100*available weighted sum/available weight sum. Missing is excluded, not zero. All missing =None.
+Visual: Laplacian blur1/(1+variance/100) .30; brightness deviation .25; low contrast .20; Canny density/.2 .15; histogram entropy/8 .10. Longest image side capped1600 for compute.
+BBox: count capped20 .20; tiny .25; known occlusion .20; unique IoU pairs .20; rare .15.
+Polygon: count .20; tiny .20; vertices capped50 .25; envelope crowding .20; rare .15. Shoelace area; envelope crowding is a proxy, not polygonIoU. Occlusion metadata informational. RLE geometry metrics unavailable.
+Keypoint: count .20; known missing .25; known occluded .25; visible pose-envelope crowding .15; rare .15. Unknown visibility not invented.
+Cuboid: count .20; known occlusion .20; source truncation .20; center pairs within5m .15; rare .15; sparsity .10 unavailable. Density/distance/projection have explicit unavailable reasons.
+Tiny ratio<.01; overlapIoU>.30; rare frequency<.05 across ALL dataset annotations; configurable. Pairwise metrics above2000 instances unavailable to bound CPU cost.
+Mixed score: count-weighted mean of available task scores. Overall .70 annotation/.30 visual, renormalized. Measured empty annotation list scores0. Clamp0–100; EASY<40, MEDIUM<70, HARD>=70, UNAVAILABLE when no available weighted source. Stored contributions reconstruct actual score within rounding tolerance; tested with images and all formats.
+Full formula table in README. Never use score as error probability.
+
+## 11. Database
+Default root annopilot.db (ignored), persisted on restart. Tables: datasets/samples/annotations/analysis_results/settings/sampling_runs/sample_selections/reviewers/review_assignments. ReviewResult represented by assignment status/note fields. Dataset storage_key enables folder cleanup; additive migration preserves prior schema.
+Production API returned[] after final restart; no fixtures/reviewers were seeded. Browser test stores are isolated under backend/tests/ui_fixture; pytest temporary stores are removed on completion. Docker named database volume is separate from local DB. Back up database and uploads together.
+
+## 12. API
+Router backend/app/routers/api.py; health/api/health; Swagger/docs. Covers datasets/upload/delete/samples/media/settings/recalculate/sampling/reviewers/balance/assignments/queues/status/notes/exports. README route matrix is accurate. Empty browser media fields tolerated; nonempty non-file media rejected. Invalid requests get readable422/409/404 messages.
+
+## 13. Frontend
+App.tsx contains seven views and upload/detail dialogs. api.ts handles backend errors, types.ts payloads, style.css responsive dark navy/cyan layout. SVG overlays scale with image stage. Features/contributions and unavailable reasons exposed. Errors visible within dialogs. Chart code split into separate production chunk.
+Chrome browser test used separate frontend3001/API8001 with SQLite/uploads/exports under backend/tests. Verified landing, upload dialog, CVAT fixture import WITHOUT media, real computed dashboard, two-sample QC selection, reviewer addition, balancing, priority queue, Issue Found+note, next sample, persistence after reload, No Issue and queue completion. Production empty landing and all settings groups inspected on3000. No production mock data.
+Chrome production tab left open as deliverable at http://localhost:3000. Screenshot saved outside repo in chat visualization folder.
+
+## 14. Tests
+Executed 2026-10-03 about11:17 Bangkok:
+Command: cd backend; .venv/Scripts/python.exe -m pytest -q
+Result:39 passed,0 failed,1.66s.
+Command: .venv/Scripts/python.exe -m pip check
+Result:No broken requirements found.
+Coverage: parsers/finite geometry, malformed imports/ZIP, image matching, visual features/blur, tiny/rarity/unique overlap, polygon/keypoint/cuboid availability, missing-weight renormalization, mixed deterministic scoring/contributions, budget/deduplication/fallback, greedy balancing/unknown-score rejection, all-format uploads, full review/export persistence, saved-results preservation, stale plans and empty optional media fields.
+Earlier greedy test expected a tighter-than-guaranteed optimum; corrected to documented LPT behavior (120vs150) and largest-job bound. Empty-media regression exposed multipart string-vs-file handling; fixed. Latest full run has no failures.
+
+## 15. Frontend Build
+Final npm run build:PASS, TypeScript+Vite,7.46s. MainJS254.79kB, chart chunk423kB, CSS20.42kB. No oversized/empty chunk warning in final build. Latest npm installation reported0 vulnerabilities after Tailwind4.3.3 upgrade removed vulnerable Tailwind3 braces/micromatch chain. package-lock committed.
+Vite/esbuild needed sandbox escalation due spawnEPERM; source build succeeded. No source-build failure remains.
+
+## 16. Known Bugs
+No known failing core-workflow tests. Scope limits in sections6/7 and README. No RLE/advanced3D rendering claimed. Synchronous analysis and whole-summary client fetch can be slow at scale. Local trusted-workspace use only, no auth. Reviewer removal/rebalancing blocked if it would erase saved reviews; start new subset to rebalance.
+
+## 17. Current Blocking Issue
+Docker runtime verification ONLY. docker version returned 'Docker Desktop is manually paused. Unpause it through the Whale menu or Dashboard.' docker compose config --quiet passed. Did not alter user's pause state/restart their containers.
+Exact next action:unpause Docker, free ports3000/8000, docker compose up --build; check health/proxy/Swagger. All local core implementation/install/test/build/run work verified. No approval-review rejection occurred.
+
+## 18. Exact Next Steps
+- [ ] After Docker unpause, verify container build/start and routes localhost3000,/api/health,localhost8000/docs. Local MVP already works.
+- [ ] Upload user-owned real data and evaluate heuristics at domain scale; user provided no dataset in this session.
+- [ ] Optional future:validated RLE/calibrated point-cloud analysis/server pagination.
+Completed:backend,parsers,analyzers,frontend,sampling,workload,review/export,configuration,pytest,frontendbuild,localSwagger/proxy,README/handoff. Do not rebuild these from scratch.
+
+## 19. Commands
+New machine: .\Start-AnnoPilot.ps1 -Install
+Next starts: .\Start-AnnoPilot.ps1
+Manual backend:cd backend; python -m venv .venv; activate; pip install --upgrade pip; pip install -r requirements.txt; uvicorn app.main:app --reload --host127.0.0.1 --port8000 (insert spaces in flags as in README).
+Manual frontend:cd frontend; npm ci; npm run dev.
+Tests:cd backend; .venv/Scripts/python.exe -m pytest -q.
+Build:cd frontend; npm run build.
+Docker root:docker compose config --quiet; docker compose up --build.
+Servers left running:frontend process14984 on3000; API wrapper23832/Python child25024 on8000 at verification. Verify command lines if IDs change before stopping. Test-only servers were stopped. Ignored logs backend/server*.log and frontend/server*.log.
+
+## 20. Important Design Decisions
+1. Human judgment/source data authoritative; difficulty never writes findings.
+2. JSON geometry plus parser/analyzer strategies keep QC pipeline independent of task/format.
+3. Missing visibility/calibration stays unavailable. Available weights renormalize; balancing refuses unavailable effort rather than treating it as zero load.
+4. Revisioned sampling/assignment preserves history. Historical review export includes prior runs; sample may appear once per run.
+5. Greedy balancing deterministic, not globally optimal. Saved reviews prevent destructive reviewer removal/rebalance; start new run.
+6. Count caps/CPU/file extraction limits prevent runaway local resource use. No invented advanced metrics.
+7. All fixtures only in isolated backend/tests storage; production remains empty.
+8. greenlet3.1.1 pinned because original resolver selected source build requiring absent C++ tools onPython3.9; venv pip upgraded.
+9. Portable relative runtime paths. No remote push authorized/performed.
+
+## 21. Files to Read First
+HANDOFF.md; README.md; backend/app/main.py; backend/app/database/__init__.py; backend/app/models/__init__.py; backend/app/schemas/__init__.py; backend/app/parsers/__init__.py; backend/app/analyzers/__init__.py; backend/app/services/pipeline.py; backend/app/routers/api.py; backend/tests/test_api.py; backend/tests/test_analysis.py; frontend/src/App.tsx; frontend/src/api.ts; docker-compose.yml.
+
+## 22. Git Status
+Git initialized; inherited configured identity available. Initially no commits or remote. Complete verified source/config/fixtures/lockfile/docs ready for checkpoint immediately after this handoff save. Runtime stores/media/logs/dependencies/builds ignored. Run git status and git log -5 --oneline for authoritative current state. Checkpoint information will be recorded here after creation.
+
+## 23. Resume Instruction
+New Codex session:
+1.Read this entire HANDOFF.md.
+2.Inspect Files to Read First.
+3.Run git status and git log -5 --oneline.
+4.Verify actual source before assuming handoff is correct.
+5.Source and current test results are source of truth.
+6.Start first unfinished item under Exact Next Steps.
+7.Do not rebuild completed functionality unless verification shows it is broken.
+8.Update HANDOFF.md after meaningful progress.
