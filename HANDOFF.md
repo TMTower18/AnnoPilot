@@ -119,7 +119,7 @@ Completed:backend,parsers,analyzers,frontend,sampling,workload,review/export,con
 ## 19. Commands
 New machine: .\Start-AnnoPilot.ps1 -Install
 Next starts: .\Start-AnnoPilot.ps1
-Manual backend:cd backend; python -m venv .venv; activate; pip install --upgrade pip; pip install -r requirements.txt; uvicorn app.main:app --reload --host127.0.0.1 --port8000 (insert spaces in flags as in README).
+Manual backend:cd backend; python -m venv .venv; .\.venv\Scripts\Activate.ps1; python -m pip install --upgrade pip; python -m pip install -r requirements.txt; uvicorn app.main:app --reload --host 127.0.0.1 --port 8000.
 Manual frontend:cd frontend; npm ci; npm run dev.
 Tests:cd backend; .venv/Scripts/python.exe -m pytest -q.
 Build:cd frontend; npm run build.
@@ -141,7 +141,7 @@ Servers left running:frontend process14984 on3000; API wrapper23832/Python child
 HANDOFF.md; README.md; backend/app/main.py; backend/app/database/__init__.py; backend/app/models/__init__.py; backend/app/schemas/__init__.py; backend/app/parsers/__init__.py; backend/app/analyzers/__init__.py; backend/app/services/pipeline.py; backend/app/routers/api.py; backend/tests/test_api.py; backend/tests/test_analysis.py; frontend/src/App.tsx; frontend/src/api.ts; docker-compose.yml.
 
 ## 22. Git Status
-Git initialized; inherited configured identity available. Initially no commits or remote. Complete verified source/config/fixtures/lockfile/docs ready for checkpoint immediately after this handoff save. Runtime stores/media/logs/dependencies/builds ignored. Run git status and git log -5 --oneline for authoritative current state. Checkpoint information will be recorded here after creation.
+Git initialized; inherited configured identity used. No remote configured or push performed. Stable implementation checkpoint: dea7ee3 — Build AnnoPilot local annotation review MVP. Git status was clean after that commit; this documentation update is committed separately. Runtime stores/media/logs/dependencies/builds ignored. Git metadata required sandbox escalation because .git is read-only in the sandbox; the checkpoint succeeded. Run git status and git log -5 --oneline for authoritative latest state. Final npm audit executed successfully and reported 0 vulnerabilities. Compose config and frontend/Swagger/proxy health rechecks passed; production datasets still [].
 
 ## 23. Resume Instruction
 New Codex session:
