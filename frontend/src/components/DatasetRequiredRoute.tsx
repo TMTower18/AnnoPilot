@@ -155,7 +155,7 @@ export function DatasetRequiredDialog({
         </p>
         <div className="guard-actions">
           <button className="secondary" data-cancel onClick={onCancel}>
-            Cancel
+            Stay Here
           </button>
           <button onClick={onUpload}>
             <Upload size={16} />

@@ -44,8 +44,11 @@
   --status-glow: #2dd4bf33;
   --text-on-accent: #ffffff;
   --color-scheme: dark;
-  --interface-font-size: 16px;
-  --sidebar-width: 16.5rem;
+  --font-size-small: 16px;
+  --font-size-medium: 18px;
+  --font-size-large: 20px;
+  --interface-font-size: var(--font-size-medium);
+  --sidebar-width: 17rem;
 }
 :root[data-theme="light"] {
   --bg: #f5f8fc;
@@ -93,10 +96,10 @@
   --color-scheme: light;
 }
 :root[data-font-size="small"] {
-  --interface-font-size: 14px;
+  --interface-font-size: var(--font-size-small);
 }
 :root[data-font-size="large"] {
-  --interface-font-size: 18px;
+  --interface-font-size: var(--font-size-large);
 }
 
 :root {

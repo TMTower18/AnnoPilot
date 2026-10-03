@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  House,
   LayoutDashboard,
   Database,
   ChartNoAxesCombined,
@@ -46,9 +47,11 @@ import {
   DatasetRequiredRoute,
   type DatasetStatus,
 } from "./components/DatasetRequiredRoute";
+import { HomePage } from "./components/HomePage";
 import { AppearanceSettings } from "./components/AppearanceSettings";
 
 const nav = [
+  ["Home", House],
   ["Dashboard", LayoutDashboard],
   ["Dataset", Database],
   ["Difficulty", ChartNoAxesCombined],
@@ -286,11 +289,7 @@ export default function App() {
     }
   }
   useEffect(() => {
-    void act("Loading workspace…", async () => {
-      const selected = await load();
-      if (selected && window.location.pathname === "/")
-        navigate("Dashboard", true);
-    });
+    void act("Loading workspace…", () => load());
   }, []);
   useEffect(() => {
     if (datasetStatus === "ready" && !dataset && isDatasetPage(page) && !upload)
@@ -430,70 +429,12 @@ export default function App() {
             </div>
           )}
           {page === "Home" ? (
-            <section className="landing">
-              <div className="eyebrow">
-                <span className="online-dot" /> INTELLIGENT ANNOTATION REVIEW
-                ASSISTANT
-              </div>
-              <h1>
-                Review smarter,
-                <br />
-                <span>not more.</span>
-              </h1>
-              <p>
-                Turn annotated datasets into a focused review plan.
-                <br />
-                Understand complexity. Balance effort. Let people decide.
-              </p>
-              <button className="large" onClick={() => startUpload()}>
-                <Upload size={18} />
-                Upload Dataset
-                <ArrowRight size={18} />
-              </button>
-              <div className="workflow">
-                {[
-                  "Import",
-                  "Analyze",
-                  "Score",
-                  "Sample",
-                  "Balance",
-                  "Prioritize",
-                  "Review",
-                ].map((step, i) => (
-                  <div key={step}>
-                    <span>{String(i + 1).padStart(2, "0")}</span>
-                    {step}
-                    {i < 6 && <ChevronRight size={15} />}
-                  </div>
-                ))}
-              </div>
-              <div className="landing-cards">
-                <article>
-                  <Database />
-                  <h3>Your data, your workspace</h3>
-                  <p>
-                    Import CVAT, COCO, YOLO or KITTI annotations. No cloud
-                    services required.
-                  </p>
-                </article>
-                <article>
-                  <ChartNoAxesCombined />
-                  <h3>Complexity you can explain</h3>
-                  <p>
-                    Inspect every measured feature and its contribution to
-                    review effort.
-                  </p>
-                </article>
-                <article>
-                  <Users />
-                  <h3>A deliberate review plan</h3>
-                  <p>
-                    Choose your QC subset, balance reviewer workloads, and
-                    capture human findings.
-                  </p>
-                </article>
-              </div>
-            </section>
+            <HomePage
+              dataset={dataset}
+              status={datasetStatus}
+              onUpload={() => startUpload()}
+              onDashboard={() => requestPage("Dashboard")}
+            />
           ) : page !== "Settings" ? (
             <DatasetRequiredRoute
               status={datasetStatus}

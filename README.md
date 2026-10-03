@@ -155,9 +155,13 @@ Swagger is the authoritative request/response explorer.
 
 ## Navigation and appearance
 
-Home (`/`) and Settings (`/settings`) are available without a dataset. Dashboard (`/dashboard`), Dataset (`/dataset`), Difficulty (`/difficulty`), Smart Sampling (`/smart-sampling`), Workload (`/workload`) and Review Queue (`/review-queue`) share a dataset guard, including direct URLs and browser history. Missing data opens a feature-specific dialog with Cancel and Upload Dataset; the upload action opens the existing importer and returns to the requested feature after success. Loading and backend failures have separate states, with Retry on connection errors.
+Home (`/`) and Settings (`/settings`) are available without a dataset. Dashboard (`/dashboard`), Dataset (`/dataset`), Difficulty (`/difficulty`), Smart Sampling (`/smart-sampling`), Workload (`/workload`) and Review Queue (`/review-queue`) share a dataset guard, including direct URLs and browser history. Missing data opens a feature-specific dialog with Stay Here and Upload Dataset; the upload action opens the existing importer and returns to the requested feature after success. Loading and backend failures have separate states, with Retry on connection errors.
+
+Home is a permanent sidebar destination and product overview, separate from the dataset health Dashboard. It shows the seven-step workflow, five review modules and supported tasks with explicit partial-support limitations. Without data, its primary action opens Upload Dataset. With data, it shows real active dataset counts and offers Open Dashboard; `/` never automatically becomes Dashboard. Home remains available while the workspace loads. The guard's Stay Here action preserves the current Home/Settings page when opened from navigation.
 
 Settings → Appearance provides Light, Dark and System themes, plus Small, Medium and Large interface text. Defaults are System and Medium. Preferences apply globally and persist in this browser's localStorage; System responds to live device preference changes. Scoring settings remain independent of appearance. Tables retain horizontal scrolling at larger text sizes.
+
+Base interface sizes are Small 16px, Medium 18px and Large 20px. Relative typography preserves heading/body/caption hierarchy; sidebar, controls, tables, dialogs and all workflow pages scale together.
 
 Run the focused appearance lifecycle check with `node scripts/verify-appearance.cjs` from `frontend`.
 
