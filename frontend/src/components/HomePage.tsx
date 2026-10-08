@@ -1,37 +1,47 @@
 import {
   ArrowRight,
   Upload,
-  ChartNoAxesCombined,
-  Shuffle,
-  Users,
-  ListChecks,
   Eye,
   Database,
+  ShieldAlert,
+  ListFilter,
+  Layers,
+  Zap,
+  TrendingDown,
 } from "lucide-react";
 import type { Dataset } from "../types";
 import type { DatasetStatus } from "./DatasetRequiredRoute";
 
 const modules = [
   [
-    ChartNoAxesCombined,
-    "Difficulty Analysis",
-    "Estimate how much review effort each sample may require.",
+    ShieldAlert,
+    "Model-Assisted QC (N2-04D)",
+    "Dùng Pretrained Object Detector (YOLOv8) đối soát với Ground Truth BDD100K.",
   ],
   [
-    Shuffle,
-    "Smart Sampling",
-    "Select which samples should enter the QC subset.",
+    ListFilter,
+    "Prioritized Review Queue",
+    "Tự động tính QC Score và đẩy các mẫu có nguy cơ lỗi cao nhất lên đầu hàng đợi.",
   ],
   [
-    Users,
-    "Workload Balancer",
-    "Distribute selected samples based on estimated review effort.",
+    Layers,
+    "Dual-Overlay Visual Diff",
+    "Trực quan hóa đa lớp: Nhãn người gán (GT), Model dự đoán, và Vùng bất đồng nghi vấn.",
   ],
-  [ListChecks, "Review Priority", "Review difficult assigned samples first."],
+  [
+    Zap,
+    "1-Click Closed-Loop Action",
+    "Sửa nhãn và thêm bounding box trực tiếp vào cơ sở dữ liệu chỉ với 1 lần bấm chuột.",
+  ],
+  [
+    TrendingDown,
+    "Workload Reduction",
+    "Tự động lọc các ảnh sạch có độ đồng thuận cao, cắt giảm 60% – 80% công sức kiểm tra.",
+  ],
   [
     Eye,
-    "Human Review",
-    "The reviewer makes the final Issue / No Issue decision.",
+    "Human-in-the-Loop",
+    "Mô hình không thay thế con người; reviewer luôn là người ra quyết định thẩm định cuối cùng.",
   ],
 ] as const;
 
@@ -40,32 +50,38 @@ export function HomePage({
   status,
   onUpload,
   onDashboard,
+  onModelQC,
 }: {
   dataset?: Dataset;
   status: DatasetStatus;
   onUpload: () => void;
   onDashboard: () => void;
+  onModelQC?: () => void;
 }) {
   return (
     <section className="home-page" aria-labelledby="home-title">
       <div className="home-hero">
         <div className="eyebrow">
-          ANNOPILOT · INTELLIGENT ANNOTATION REVIEW ASSISTANT
+          ANNOPILOT · MODEL-ASSISTED QUALITY CONTROL (N2-04D)
         </div>
         <h1 id="home-title">
-          Review smarter,
+          Bắt vật thể bị sót &amp;
           <br />
-          <span>not more.</span>
+          <span>sai class trên BDD100K.</span>
         </h1>
         <p>
-          Analyze annotation complexity, select the right QC samples, balance
-          reviewer workload, and prioritize difficult cases.
+          Hệ thống Model-Assisted QC sử dụng Pretrained Detector làm Second Reviewer,
+          tự động phát hiện Missing Objects &amp; Wrong Classes, xếp hạng hàng đợi ưu tiên
+          và hỗ trợ sửa lỗi 1 chạm.
         </p>
         <div className="home-actions">
           {dataset ? (
             <>
-              <button className="large" onClick={onDashboard}>
-                Open Dashboard <ArrowRight size={20} />
+              <button className="large" onClick={onModelQC || onDashboard}>
+                <ShieldAlert size={20} /> Open Model QC <ArrowRight size={20} />
+              </button>
+              <button className="secondary" onClick={onDashboard}>
+                <Database size={18} /> View Dataset
               </button>
               <button className="secondary" onClick={onUpload}>
                 <Upload size={18} /> Upload Dataset
@@ -73,13 +89,13 @@ export function HomePage({
             </>
           ) : (
             <button className="large" onClick={onUpload}>
-              <Upload size={20} /> Upload Dataset <ArrowRight size={20} />
+              <Upload size={20} /> Upload BDD100K Dataset <ArrowRight size={20} />
             </button>
           )}
         </div>
         <p className="home-principle">
-          Difficulty estimates review effort, never error probability. People
-          decide whether an issue exists.
+          Human-in-the-loop: Bất đồng giữa Pretrained Model và Annotator là bằng chứng gợi ý.
+          Reviewer luôn giữ quyền quyết định cuối cùng.
         </p>
       </div>
 
@@ -127,19 +143,18 @@ export function HomePage({
 
       <section className="home-section" aria-labelledby="workflow-title">
         <div className="home-section-heading">
-          <div className="eyebrow">FROM ANNOTATIONS TO ACTION</div>
-          <h2 id="workflow-title">A focused review workflow</h2>
-          <p>One connected path from your data to human findings.</p>
+          <div className="eyebrow">QUY TRÌNH MODEL-ASSISTED QC</div>
+          <h2 id="workflow-title">Quy trình Khép kín (Closed-Loop Workflow)</h2>
+          <p>Từ dữ liệu gán nhãn thô đến kết quả đối soát và khắc phục lỗi trực tiếp.</p>
         </div>
         <ol className="home-workflow">
           {[
-            "Upload",
-            "Analyze",
-            "Difficulty",
-            "Smart Sampling",
-            "Balance",
-            "Prioritize",
-            "Human Review",
+            "Nạp BDD100K",
+            "YOLOv8 Inference",
+            "IoU Audit Engine",
+            "Hàng đợi Ưu tiên",
+            "Visual Diff 2 lớp",
+            "1-Click Sửa lỗi",
           ].map((step, index) => (
             <li key={step}>
               <span>{String(index + 1).padStart(2, "0")}</span>
@@ -152,8 +167,8 @@ export function HomePage({
 
       <section className="home-section" aria-labelledby="modules-title">
         <div className="home-section-heading">
-          <div className="eyebrow">YOUR REVIEW TOOLKIT</div>
-          <h2 id="modules-title">Plan effort. Capture judgment.</h2>
+          <div className="eyebrow">CÁC TÍNH NĂNG CỐT LÕI</div>
+          <h2 id="modules-title">Bộ công cụ Giữ chất lượng Dữ liệu</h2>
         </div>
         <div className="home-modules">
           {modules.map(([Icon, name, description]) => (
@@ -167,17 +182,18 @@ export function HomePage({
       </section>
 
       <section className="card home-support" aria-labelledby="support-title">
-        <h2 id="support-title">Built for multiple annotation tasks</h2>
+        <h2 id="support-title">Tập trung cho Xe Tự hành &amp; BDD100K Taxonomy</h2>
         <div className="home-task-list">
-          <span>2D Bounding Box</span>
-          <span>Polygon Segmentation</span>
-          <span>Keypoint / Pose</span>
-          <span>3D Cuboid · metadata review</span>
+          <span>Car / Van / SUV</span>
+          <span>Pedestrian (Người đi bộ)</span>
+          <span>Rider (Người lái xe 2 bánh)</span>
+          <span>Truck vs Bus Prior</span>
+          <span>Traffic Light &amp; Sign</span>
         </div>
         <p>
-          Import CVAT images XML, COCO, YOLO detection or KITTI labels. RLE
-          masks are retained with limited analysis; articulated pose skeletons
-          and calibrated point-cloud analysis / 3D viewing are not available.
+          Hệ thống áp dụng ma trận nhầm lẫn tiền nghiệm (Driving Confusion Priors)
+          đặc thù cho lĩnh vực lái xe tự động để phân biệt các lỗi nghiêm trọng
+          như sót người đi bộ từ xa, hoặc gán nhầm xe tải thành xe bus.
         </p>
       </section>
     </section>

@@ -48,6 +48,37 @@ def test_yolo_missing_media_fails(tmp_path):
     with pytest.raises(ValueError,match='matching image'):
         YOLOParser().parse([write(tmp_path,'a.txt','0 0.5 0.5 0.2 0.2')],[])
 
+
+@pytest.mark.parametrize('name,content', [('train.txt', './images/a.png'), ('val.txt', ''), ('test.txt', 'C:\\dataset\\a.png'), ('custom.txt', 'images/a.png')])
+def test_yolo_image_lists_are_not_labels(tmp_path, name, content):
+    image = tmp_path / 'a.png'
+    Image.new('RGB', (100, 200)).save(image)
+    manifest = write(tmp_path, name, content)
+    label = write(tmp_path, 'a.txt', '0 0.5 0.5 0.2 0.4')
+    parser = YOLOParser()
+    rows = parser.parse([manifest, label], [image])
+    assert len(rows) == 1 and len(rows[0]['annotations']) == 1
+    assert 'ignored YOLO image list' in parser.warnings[0]
+    assert detect_format([manifest, label]) == 'YOLO'
+
+
+def test_yolo_train_can_be_real_label(tmp_path):
+    image = tmp_path / 'train.png'
+    Image.new('RGB', (100, 100)).save(image)
+    label = write(tmp_path, 'train.txt', '0 0.5 0.5 0.2 0.2')
+    assert len(YOLOParser().parse([label], [image])[0]['annotations']) == 1
+
+
+def test_yolo_image_list_only_has_actionable_error(tmp_path):
+    with pytest.raises(ValueError, match='per-image label TXT'):
+        YOLOParser().parse([write(tmp_path, 'train.txt', 'images/a.png')], [])
+
+
+def test_yolo_duplicate_matching_images_still_fails(tmp_path):
+    label = write(tmp_path, 'a.txt', '0 0.5 0.5 0.2 0.2')
+    with pytest.raises(ValueError, match='matching image'):
+        YOLOParser().parse([label], [tmp_path / 'a.png', tmp_path / 'a.jpg'])
+
 def test_kitti_coordinates_and_unavailable_occlusion(tmp_path):
     p=write(tmp_path,'000001.txt','Car 0.2 3 0 0 0 10 10 1.5 1.8 4 1 2 30 0.5')
     a=KITTIParser().parse([p],[])[0]['annotations'][0]
@@ -55,3 +86,36 @@ def test_kitti_coordinates_and_unavailable_occlusion(tmp_path):
     assert a['geometry']['dimensions']['length']==4
     assert a['occluded'] is None
     assert 'bottom center' in a['source_metadata']['coordinate_system']
+
+def test_cvat_video_tracks_and_meta(tmp_path):
+    xml_content = '''<annotations>
+        <version>1.1</version>
+        <meta>
+            <task>
+                <id>42</id>
+                <name>Test Task</name>
+                <size>2</size>
+                <original_size><width>640</width><height>480</height></original_size>
+            </task>
+            <segments>
+                <segment><id>99</id></segment>
+            </segments>
+        </meta>
+        <track id="1" label="Vehicle">
+            <box frame="0" outside="0" occluded="0" xtl="10" ytl="20" xbr="50" ybr="60" />
+            <box frame="1" outside="1" occluded="0" xtl="10" ytl="20" xbr="50" ybr="60" />
+        </track>
+    </annotations>'''
+    p = write(tmp_path, 'annotations.xml', xml_content)
+    parser = CVATParser()
+    samples = parser.parse([p], [])
+    assert parser.cvat_task_id == 42
+    assert parser.cvat_job_id == 99
+    assert len(samples) == 2
+    assert samples[0]['file_name'] == 'frame_000000.PNG'
+    assert len(samples[0]['annotations']) == 1
+    assert samples[0]['annotations'][0]['label'] == 'Vehicle'
+    assert samples[0]['annotations'][0]['geometry'] == {'x1': 10.0, 'y1': 20.0, 'x2': 50.0, 'y2': 60.0}
+    # Frame 1 has outside=1 so no active annotation
+    assert len(samples[1]['annotations']) == 0
+
